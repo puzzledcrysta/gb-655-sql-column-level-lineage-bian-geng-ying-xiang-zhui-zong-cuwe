@@ -9,6 +9,7 @@ from app import config, errors, manifest as manifest_mod, store
 from app.modules.m1_intake import service as intake
 from app.modules.m2_types import service as types
 from app.modules.m3_compat import service as compat
+from app.modules.m3_compat import reports as batch_reports
 from app.modules.m4_mapping import service as mapping
 from app.modules.m5_impact import service as impact
 from app.modules.m6_batches import guard, history, window as window_mod
@@ -100,6 +101,7 @@ def execute(old_file: str = config.DEFAULT_OLD, new_file: str = config.DEFAULT_N
                                  new_snapshot["fields"], edges)
     mapping_table = mapping.build_mapping(old_snapshot["fields"], new_snapshot["fields"], diff)
     impact_payload = impact.build(diff, refs["consumers"], resolution)
+    compatibility = batch_reports.build(diff, refs["consumers"], resolution)
     ledger = migration.build_ledger(diff, refs["consumers"], resolution)
 
     warnings = guard.overlap_warnings(window, store.list_windows())
@@ -141,6 +143,7 @@ def execute(old_file: str = config.DEFAULT_OLD, new_file: str = config.DEFAULT_N
                  "consumers": refs["consumers"]},
         "resolution": _json_safe(resolution),
         "impact": impact_payload,
+        "compatibility": compatibility,
         "ledger": ledger,
         "quarantine": ([dict(row, side="old") for row in old_snapshot["diagnostics"]]
                        + [dict(row, side="new") for row in new_snapshot["diagnostics"]]),

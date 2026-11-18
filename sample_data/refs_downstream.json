@@ -5,6 +5,11 @@
       "name": "dw.mv_order_daily",
       "kind": "view",
       "sql": "select o.order_id, o.order_no, o.order_amt from dim_order o where o.order_id > 0",
+      "read_capability": {
+        "dim_order.order_id": "bigint",
+        "dim_order.order_no": "varchar(64)",
+        "dim_order.order_amt": "decimal(18,2)"
+      },
       "upstream": [],
       "downstream": ["dw.task_settle"]
     },
@@ -12,6 +17,11 @@
       "name": "dw.mv_order_stat",
       "kind": "view",
       "sql": "select o.status, o.order_id, o.ord_no from dim_order o where o.ord_no is not null",
+      "read_capability": {
+        "dim_order.order_id": "bigint",
+        "dim_order.status": "varchar(16)",
+        "dim_order.ord_no": "varchar(64)"
+      },
       "upstream": ["dw.mv_order_daily"],
       "downstream": []
     },
@@ -19,6 +29,11 @@
       "name": "dw.mv_pay_daily",
       "kind": "view",
       "sql": "select p.pay_id, p.pay_amt, p.channel from fct_pay p",
+      "read_capability": {
+        "fct_pay.pay_id": "bigint",
+        "fct_pay.pay_amt": "decimal(18,2)",
+        "fct_pay.channel": "varchar(16)"
+      },
       "upstream": ["dw.mv_user_dim"],
       "downstream": ["dw.mv_user_dim"]
     },
@@ -26,6 +41,11 @@
       "name": "dw.task_settle",
       "kind": "task",
       "sql": "select u.user_id, u.user_name, u.created_at from dim_user u",
+      "read_capability": {
+        "dim_user.user_id": "bigint",
+        "dim_user.user_name": "varchar(64)",
+        "dim_user.created_at": "timestamp"
+      },
       "upstream": ["dw.mv_order_daily"],
       "downstream": ["ads.rpt_pay_channel"]
     },
@@ -40,6 +60,10 @@
       "name": "ads.rpt_pay_channel",
       "kind": "view",
       "sql": "select p.pay_id, p.channel from fct_pay p",
+      "read_capability": {
+        "fct_pay.pay_id": "bigint",
+        "fct_pay.channel": "varchar(16)"
+      },
       "upstream": [],
       "downstream": []
     },
@@ -47,6 +71,7 @@
       "name": "dw.task_self",
       "kind": "task",
       "sql": "select o.order_id from dim_order o",
+      "read_capability": {"dim_order.order_id": "bigint"},
       "upstream": ["dw.task_self"],
       "downstream": ["dw.task_self"]
     }

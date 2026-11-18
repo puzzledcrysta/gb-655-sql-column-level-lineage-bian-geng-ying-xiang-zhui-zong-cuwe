@@ -17,6 +17,11 @@ FIELD_HEADER = [
 
 REF_HEADER = ["consumer", "kind", "ref", "table", "column", "via", "field_id", "reason"]
 
+CAPABILITY_HEADER = [
+    "consumer", "kind", "scope", "table", "column", "capability", "new_type",
+    "read_status", "read_reason", "detail", "repair",
+]
+
 
 def _buffer() -> tuple[io.StringIO, "csv.writer"]:
     buffer = io.StringIO()
@@ -78,3 +83,31 @@ def ledger_csv(ledger: dict) -> str:
 
 def manifest_json(manifest: dict) -> str:
     return json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+
+
+def capability_csv(run: dict) -> str:
+    """报表读取能力账：每个报表一条，未登记也给明确结论。"""
+    compatibility = run.get("compatibility") or {}
+    read = compatibility.get("read") or {}
+    buffer, writer = _buffer()
+    writer.writerow(CAPABILITY_HEADER)
+    for report in read.get("reports") or []:
+        capability_text = report.get("capability_text") or "未登记"
+        kind = report.get("kind") or "task"
+        base = [report["consumer"], kind, report.get("status") or "", "", "",
+                capability_text, "", report.get("reason") or "",
+                report.get("status_label") or "", report.get("detail") or "",
+                report.get("repair") or ""]
+        writer.writerow(base)
+        for check in report.get("fields") or []:
+            writer.writerow([report["consumer"], kind, "field", check.get("table") or "",
+                             check.get("column") or "", check.get("capability_text") or "",
+                             check.get("new_type") or "", check.get("status") or "",
+                             check.get("status_label") or "", check.get("detail") or "",
+                             check.get("repair") or ""])
+        for link in report.get("broken_links") or []:
+            writer.writerow([report["consumer"], kind, "ref", link.get("table") or "",
+                             link.get("column") or "", "", link.get("new_name") or "",
+                             "broken", link.get("status_label") or "", link.get("detail") or "",
+                             "fix_reference"])
+    return buffer.getvalue()

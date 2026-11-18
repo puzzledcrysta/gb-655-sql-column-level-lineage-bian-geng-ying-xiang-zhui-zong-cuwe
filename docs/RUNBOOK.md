@@ -22,8 +22,8 @@ docker compose exec -T app python -m pytest -q
 2. `/types` 比较两个类型写法，看读者 / 写者两向结论。
 3. `/mapping` 看旧名到新名、别名 SQL、冲突项。
 4. `/impact` 看受影响节点、环、断链、单边登记。
-5. `/batches` 点「跑一次」，再点「陈旧提交」验证 409。
-6. `/spec` 导出迁移单与三份账目 CSV。
+5. `/batches` 点「跑一次」，再点「陈旧提交」验证 409；看「扩容读写兼容」的写端与逐报表读端。
+6. `/spec` 导出迁移单与四份账目 CSV（含读取能力账）。
 
 ## 4 重建数据库
 
@@ -49,11 +49,13 @@ docker compose up -d --build
 | GET | `/api/impact` | 影响面、环、断链 |
 | POST | `/api/runs` | 跑批次，可带基线版本号与生效区间 |
 | GET | `/api/batches` | 批次历史 |
+| GET | `/api/compatibility` | 当前批次的扩容读写兼容结论（写端 + 逐报表读端） |
 | GET | `/api/reconcile` | 四账对账 |
 | GET | `/api/export/spec.md` | 迁移单 Markdown |
 | GET | `/api/export/fields.csv` | 字段账 CSV |
 | GET | `/api/export/refs.csv` | 引用账 CSV |
 | GET | `/api/export/ledger.csv` | 账目 CSV |
+| GET | `/api/export/capability.csv` | 报表读取能力账 CSV |
 | GET | `/api/export/manifest.json` | 运行清单 |
 
 ## 6 失败处置
@@ -64,6 +66,15 @@ docker compose up -d --build
 | 400 `WINDOW_INVERTED` | 生效区间起点不早于终点 | 检查 `effective_from` / `effective_to` |
 | 400 `BAD_INPUT` | 文件名、参数或 JSON 结构不对 | 看返回的 `detail` |
 | 404 `NOT_FOUND` | 还没跑过批次 | 先在 `/batches` 点「跑一次」 |
+
+## 6.1 扩容读写兼容怎么读
+
+- 结论 `BATCH_READ_PARTIAL` 表示写端可以放行，但不能整批切换：先按报表逐条处理读端。
+- 读端为 `lossy`：该报表按登记的能力读新值会丢精度，需要加宽读取类型或改下游类型。
+- 读端为 `unresolved`（原因 `READ_CAPABILITY_MISSING`）：报表没登记读取能力，不能证明
+  无损；在 `refs_downstream.json` 的 `read_capability` 里补登记后重跑。
+- 上游字段类型或下游读取能力任一更新，输入摘要变化 → 生成新批次；同样的输入重跑命中
+  批次键，不新增批次。
 
 ## 7 端口与并发
 

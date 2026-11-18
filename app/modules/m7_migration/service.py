@@ -33,6 +33,10 @@ def ledger_csv_text(run: dict) -> str:
     return csv_out.ledger_csv(run.get("ledger") or {})
 
 
+def capability_csv_text(run: dict) -> str:
+    return csv_out.capability_csv(run)
+
+
 def manifest_json_text(run: dict) -> str:
     from datetime import datetime
 
@@ -41,6 +45,7 @@ def manifest_json_text(run: dict) -> str:
     payload = manifest_mod.build_manifest(run, moment) if moment else {}
     payload["input_names"] = run.get("input_names") or {}
     payload["ledger"] = run.get("ledger") or {}
+    payload["compatibility"] = run.get("compatibility") or {}
     payload["warnings"] = run.get("warnings") or []
     return csv_out.manifest_json(payload)
 

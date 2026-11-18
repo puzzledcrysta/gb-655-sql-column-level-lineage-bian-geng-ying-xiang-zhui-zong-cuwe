@@ -8,8 +8,22 @@
     <button type="button" data-action="run">跑一次</button>
     <button type="button" class="ghost" data-action="run" data-force-stale="1">陈旧提交</button>
     <a class="btn ghost" href="/api/reconcile">对账 JSON</a>
+    <a class="btn ghost" href="/api/compatibility">读写兼容 JSON</a>
     <span class="flash" data-flash></span>
   </div>
+
+  {% if compatibility %}
+  <p class="lede">
+    扩容 <span class="mono">{{ compatibility.scope.widened_fields }}</span> 个字段
+    写端 <span class="mono">{% if compatibility.write.allowed %}放行{% else %}拦下{% endif %}</span>
+    受影响报表 <span class="mono">{{ compatibility.read.summary.affected_reports }}</span>
+    结论
+    {% if compatibility.verdict == 'BATCH_COMPATIBLE' %}<span class="st st-ok">批次兼容</span>
+    {% elif compatibility.verdict == 'BATCH_READ_PARTIAL' %}<span class="st st-warn">分批读取</span>
+    {% elif compatibility.verdict == 'BATCH_NOT_APPLICABLE' %}<span class="st st-none">不适用</span>
+    {% else %}<span class="st st-bad">扩容拦下</span>{% endif %}
+  </p>
+  {% endif %}
 
   {% if runs %}
   <div class="wrap-scroll">
@@ -18,7 +32,8 @@
       <thead>
         <tr>
           <th>批次</th><th class="num">序号</th><th>版本</th><th>生效起</th>
-          <th class="num">字段</th><th class="num">破坏</th><th class="num">断链</th><th>账</th><th>生成</th>
+          <th class="num">字段</th><th class="num">破坏</th><th class="num">断链</th>
+          <th>读写兼容</th><th>账</th><th>生成</th>
         </tr>
       </thead>
       <tbody>
@@ -31,6 +46,13 @@
           <td class="num">{{ item.old_total }}/{{ item.new_total }}</td>
           <td class="num">{{ item.breaking }}</td>
           <td class="num">{{ item.refs_broken }}</td>
+          <td>
+            {% if item.compat_verdict == 'BATCH_COMPATIBLE' %}<span class="st st-ok">兼容</span>
+            {% elif item.compat_verdict == 'BATCH_READ_PARTIAL' %}<span class="st st-warn">分批读取</span>
+            {% elif item.compat_verdict == 'BATCH_NOT_APPLICABLE' %}<span class="st st-none">不适用</span>
+            {% elif item.compat_verdict %}<span class="st st-bad">拦下</span>
+            {% else %}—{% endif %}
+          </td>
           <td>{% if item.balanced %}<span class="st st-ok">平</span>{% else %}<span class="st st-bad">不平</span>{% endif %}</td>
           <td class="name">{{ item.created_at|day }}</td>
         </tr>
@@ -44,7 +66,92 @@
 </section>
 
 <section class="doc-section">
-  <h2><span class="clause">2</span>对账</h2>
+  <h2><span class="clause">2</span>扩容读写兼容</h2>
+  {% if not compatibility %}
+  <p class="empty">还没有批次。</p>
+  {% else %}
+  <div class="wrap-scroll">
+    <table>
+      <caption>写端：新类型能否无损容纳旧值<sup class="fn">2</sup></caption>
+      <thead>
+        <tr><th>表</th><th>字段</th><th>类型</th><th>必填</th><th>写端</th><th>值域 / 刻度</th></tr>
+      </thead>
+      <tbody>
+        {% for field in compatibility.write.fields %}
+        <tr>
+          <td class="name">{{ field.table }}</td>
+          <td class="name">{{ field.old_name }}{% if field.new_name and field.new_name != field.old_name %} → {{ field.new_name }}{% endif %}</td>
+          <td class="name">{{ field.old_type }} → {{ field.new_type }}</td>
+          <td>{% if field.required_change == 'tightened' %}收紧{% elif field.required_change == 'loosened' %}放宽{% else %}—{% endif %}</td>
+          <td>{% if field.writer_ok %}<span class="st st-ok">放行</span>{% else %}<span class="st st-bad">拦下</span>{% endif %}</td>
+          <td class="reason">
+            {% if field.evidence.old %}
+            {{ field.evidence.old.lo }}~{{ field.evidence.old.hi }} ⇒ {{ field.evidence.new.lo }}~{{ field.evidence.new.hi }}，刻度 {{ field.evidence.old.quantum }} ⇒ {{ field.evidence.new.quantum }}
+            {% elif field.evidence.old_length is defined %}
+            长度 {{ field.evidence.old_length }} ⇒ {{ field.evidence.new_length }}
+            {% else %}
+            精度 {{ field.evidence.old_rank }} ⇒ {{ field.evidence.new_rank }}
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="wrap-scroll">
+    <table>
+      <caption>读端：按报表登记的读取能力逐条核对<sup class="fn">3</sup></caption>
+      <thead>
+        <tr><th>报表</th><th>读取能力</th><th>引用字段</th><th>新类型</th><th>结论</th><th>依据</th></tr>
+      </thead>
+      <tbody>
+        {% for report in compatibility.read.reports %}
+        {% if report.status != 'not_affected' %}
+        <tr>
+          <td class="name">{{ report.consumer }}</td>
+          <td class="reason">{{ report.capability_text }}</td>
+          <td class="name">
+            {% for check in report.fields %}{{ check.table }}.{{ check.column }}<br>{% endfor %}
+            {% for link in report.broken_links %}{{ link.ref }}<br>{% endfor %}
+          </td>
+          <td class="name">
+            {% for check in report.fields %}{{ check.new_type }}<br>{% endfor %}
+            {% for link in report.broken_links %}—<br>{% endfor %}
+          </td>
+          <td>
+            {% if report.status == 'ok' %}<span class="st st-ok">无损</span>
+            {% elif report.status == 'lossy' %}<span class="st st-bad">丢精度</span>
+            {% elif report.status == 'broken' %}<span class="st st-bad">断链</span>
+            {% elif report.status == 'unresolved' and report.fields and report.fields[0].status == 'invalid' %}<span class="st st-warn">登记无效</span>
+            {% else %}<span class="st st-warn">未登记</span>{% endif %}
+          </td>
+          <td class="reason">
+            {% for check in report.fields %}{{ check.detail_label }}<br>{% endfor %}
+            {% for link in report.broken_links %}{{ link.detail or '引用无法解析' }}<br>{% endfor %}
+            {% if not report.fields and not report.broken_links %}{{ report.detail_label }}{% endif %}
+          </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <table>
+    <caption>依据</caption>
+    <thead><tr><th>说明</th></tr></thead>
+    <tbody>
+      {% for line in compatibility.basis %}
+      <tr><td class="reason">{{ line }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+<section class="doc-section">
+  <h2><span class="clause">3</span>对账</h2>
   {% if empty %}
   <p class="empty">还没有批次。</p>
   {% else %}
@@ -66,12 +173,12 @@
     <div><dt>经别名</dt><dd>{{ ledger.refs.aliased }}<span class="unit">处</span></dd></div>
     <div><dt>引用差额</dt><dd>{{ ledger.refs.gap }}<span class="unit">处</span></dd></div>
   </dl>
-  <p class="lede">生效区间 {{ reconcile.window.from|day }} 起，末端{{ '开' if not reconcile.window.to else '闭' }}<sup class="fn">2</sup></p>
+  <p class="lede">生效区间 {{ reconcile.window.from|day }} 起，末端{{ '开' if not reconcile.window.to else '闭' }}<sup class="fn">4</sup></p>
   {% endif %}
 </section>
 
 <section class="doc-section">
-  <h2><span class="clause">3</span>警告</h2>
+  <h2><span class="clause">4</span>警告</h2>
   {% if run and run.get('warnings') %}
   <table>
     <thead><tr><th>原因</th><th>明细</th></tr></thead>
@@ -89,6 +196,8 @@
 <aside class="notes">
   <ol class="footnotes">
     <li>同输入重跑命中批次键，不新增行。<a class="back" href="#main">↩</a></li>
+    <li>写端只看新类型能否无损容纳旧取值：范围、刻度、精确整数三件套都要不后退。<a class="back" href="#main">↩</a></li>
+    <li>读端看报表登记的读取能力能否无损读出扩容后的新取值；没登记的报表不猜，单独标未登记。<a class="back" href="#main">↩</a></li>
     <li>区间左闭右开，相邻区间不重叠。<a class="back" href="#main">↩</a></li>
   </ol>
 </aside>

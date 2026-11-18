@@ -5,7 +5,13 @@ from __future__ import annotations
 import json
 
 from app import config, errors, manifest
+from app.modules.m3_compat import capability as read_capability
 from app.modules.m4_mapping import mapping, rename, sqlalias
+
+
+def normalize_capability(raw) -> tuple[dict | None, str | None]:
+    """报表读取能力的归一逻辑只在 m3 里实现，这里只转一手。"""
+    return read_capability.normalize_registration(raw)
 
 
 def load_refs(rel_path: str) -> dict:
@@ -30,6 +36,9 @@ def load_refs(rel_path: str) -> dict:
             raise errors.BadInput("下游节点重名", detail={"name": name})
         seen.add(name)
         parsed = sqlalias.extract_refs(str(item.get("sql") or ""))
+        registration, capability_error = normalize_capability(
+            item.get("read_capability", item.get("capability"))
+        )
         consumers.append({
             "name": name,
             "kind": str(item.get("kind") or "task"),
@@ -39,6 +48,8 @@ def load_refs(rel_path: str) -> dict:
             "unresolved": parsed["unresolved"],
             "upstream": [str(x) for x in (item.get("upstream") or [])],
             "downstream": [str(x) for x in (item.get("downstream") or [])],
+            "read_capability": registration,
+            "read_capability_error": capability_error,
         })
     if not consumers:
         raise errors.BadInput("下游登记为空", detail={"file": path.name})

@@ -58,6 +58,34 @@
 - 改名同时换类型的字段不生成别名，引用同样判断链。
 - 上下游任一边缺登记即 `REF_ONE_SIDED`。
 
+## 5.1 报表读取能力
+
+- 下游节点可写 `read_capability`，声明「这个报表能无损读到什么类型」：
+  - `"decimal(18,2)"`：该报表全部引用共用这一个能力；
+  - `{"dim_order.order_amt": "decimal(20,4)", "*": "varchar(8)"}`：按 `表.列` 登记，`*` 作缺省。
+- 能力也归一成类型格四件套，和新版本字段的类型逐条比较：
+  刻度变粗 `scale_exceeds_capability`、范围不足 `range_exceeds_capability`、
+  精确整数不足 `exactness_exceeds_capability`、长度不足 `length_exceeds_capability`、
+  时间精度不足 `temporal_exceeds_capability`、跨族 `family_mismatch`。
+- 状态四档：`ok`（无损）、`lossy`（会丢精度）、`unregistered`（该字段未登记）、
+  `invalid`（登记不可解析）。后两者统一给 `READ_CAPABILITY_MISSING`。
+- 未登记的报表不按兼容处理，也不冒充破坏：结论是「不能证明无损」，
+  处置码 `register_capability`，需补登记后重算。
+
+## 5.2 扩容批次读写兼容
+
+- 范围：新版本里 `change=widen` 且落在 `retyped` 桶的字段（放宽字段一定进这个桶）。
+  改名冲突、删除、新增不混进扩容这一批，各自按字段判定处理。
+- 写端：扩容字段的 `writer_ok` 全为真才放行；任一条不通过即 `BATCH_WRITE_BLOCKED`。
+- 读端：对每个登记报表，逐条核对其引用的扩容字段；引用了但已断链的单独记 `REF_BROKEN`。
+- 批次结论四档：
+  - `BATCH_COMPATIBLE`：写端放行，所有受影响报表无损；
+  - `BATCH_READ_PARTIAL`：写端放行，但有报表丢精度 / 未登记 / 断链，按报表分批改造；
+  - `BATCH_BREAKING`：写端被拦下，扩容不能整批放行；
+  - `BATCH_NOT_APPLICABLE`：本批没有扩容字段，读写分向核对不适用（`BATCH_NO_WIDEN`）。
+- 未引用扩容字段的报表记 `not_affected` + `READ_CAPABILITY_NOT_REQUIRED`，同样是一条
+  明确结论，不是缺省值。
+
 ## 6 采信
 
 - 编码回退链：`utf-8-sig` → `utf-8` → `gb18030`，先剥字节序标记再探测。

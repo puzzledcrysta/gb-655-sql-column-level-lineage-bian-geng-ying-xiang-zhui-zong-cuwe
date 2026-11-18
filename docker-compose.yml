@@ -6,7 +6,7 @@ services:
       - "18214:8000"
     environment:
       LINEAGEGUARD_DB: /data/lineageguard.sqlite
-      LINEAGEGUARD_RULESET: fm-2026.11.1
+      LINEAGEGUARD_RULESET: fm-2026.11.2
       TZ: UTC
     volumes:
       - lineageguard-data:/data

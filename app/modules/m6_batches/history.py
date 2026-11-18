@@ -9,6 +9,9 @@ def summary_of(run: dict) -> dict:
     ledger = run.get("ledger") or {}
     counts = ledger.get("counts") or {}
     balanced = ledger.get("balanced") or {}
+    compatibility = run.get("compatibility") or {}
+    read = compatibility.get("read") or {}
+    read_summary = read.get("summary") or {}
     return {
         "run_id": run["run_id"],
         "version_seq": run["version_seq"],
@@ -26,6 +29,15 @@ def summary_of(run: dict) -> dict:
         "balanced": bool(balanced.get("all")),
         "reused": bool(run.get("reused")),
         "warnings": len(run.get("warnings") or []),
+        "compat_verdict": compatibility.get("verdict"),
+        "compat_reason": compatibility.get("reason"),
+        "compat_label": compatibility.get("verdict_label"),
+        "widened_fields": (compatibility.get("scope") or {}).get("widened_fields", 0),
+        "read_affected": read_summary.get("affected_reports", 0),
+        "read_ok": read_summary.get("ok_reports", 0),
+        "read_lossy": read_summary.get("lossy_reports", 0),
+        "read_unresolved": read_summary.get("unresolved_reports", 0),
+        "read_broken": read_summary.get("broken_reports", 0),
     }
 
 

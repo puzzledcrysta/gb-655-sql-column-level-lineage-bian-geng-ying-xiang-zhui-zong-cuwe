@@ -28,6 +28,7 @@ def batches_page(request: Request):
         runs=runs,
         ledger=(run or {}).get("ledger") or {},
         reconcile=history.reconcile(run) if run else {},
+        compatibility=(run or {}).get("compatibility") or {},
         current_seq=store.current_version_seq(),
     )
 
@@ -60,6 +61,7 @@ def create_run(payload: dict | None = None):
         "version_seq": run["version_seq"],
         "counts": (run.get("ledger") or {}).get("counts") or {},
         "balanced": (run.get("ledger") or {}).get("balanced") or {},
+        "compatibility": run.get("compatibility") or {},
         "warnings": run.get("warnings") or [],
         "window": run.get("window") or {},
     }
@@ -70,6 +72,20 @@ def batches_api():
     return {
         "current_version_seq": store.current_version_seq(),
         "runs": history.listing(),
+    }
+
+
+@router.get("/api/compatibility")
+def compatibility_api():
+    run = store.latest_run()
+    if not run:
+        raise errors.NotFound("还没有批次，先在版本历史页跑一次")
+    return {
+        "run_id": run["run_id"],
+        "version_seq": run["version_seq"],
+        "old": run.get("version_label_old"),
+        "new": run.get("version_label_new"),
+        **(run.get("compatibility") or {}),
     }
 
 

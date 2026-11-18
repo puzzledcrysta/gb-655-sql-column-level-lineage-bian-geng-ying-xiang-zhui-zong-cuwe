@@ -9,6 +9,7 @@ FOOTNOTES = [
     "类型放宽指新类型能无损容纳旧类型的全部取值。",
     f"生效区间按 {config.WINDOW_SEMANTICS} 处理。",
     "账目差额应为 0；不为 0 说明判定漏项。",
+    "扩容批次结论：写端放行才算放行；读端按报表登记的读取能力逐条核对，未登记的不当作无损。",
 ]
 
 
@@ -86,9 +87,15 @@ def render(run: dict) -> str:
         "",
         f"字段身份按 field_id 对齐[^1]，类型放宽按值域与刻度判定[^2]，账目差额应为 0[^4]。",
         "",
-        "## 3 破坏项",
+        "### 2.1 扩容读写兼容",
         "",
     ]
+    parts.extend(_compatibility_lines(run))
+    parts.extend([
+        "",
+        "## 3 破坏项",
+        "",
+    ])
 
     items = clauses(run)
     if not items:
@@ -145,6 +152,61 @@ def render(run: dict) -> str:
         parts.append(f"[^{index}]: {note}")
     parts.append("")
     return "\n".join(parts)
+
+
+def _compatibility_lines(run: dict) -> list[str]:
+    """第 2.1 节：批次结论 + 写端值域 + 逐报表读取能力。"""
+    compatibility = run.get("compatibility") or {}
+    if not compatibility:
+        return ["本次批次没有扩容字段，无需读写分向核对。"]
+    scope = compatibility.get("scope") or {}
+    write = compatibility.get("write") or {}
+    read = compatibility.get("read") or {}
+    summary = read.get("summary") or {}
+    lines = [
+        f"- 结论：{compatibility.get('verdict')}（{compatibility.get('verdict_label')}）[^5]",
+        f"- 扩容字段：{scope.get('widened_fields', 0)} 个；写端"
+        f"{'放行' if write.get('allowed') else '拦下'}；"
+        f"受影响报表 {summary.get('affected_reports', 0)} 个"
+        f"（无损 {summary.get('ok_reports', 0)}、丢精度 {summary.get('lossy_reports', 0)}、"
+        f"未登记 {summary.get('unresolved_reports', 0)}、"
+        f"断链 {summary.get('broken_reports', 0)}）",
+        "",
+        "写端：",
+        "",
+    ]
+    write_rows = [
+        [field["table"], field["old_name"], field["old_type"], field["new_type"],
+         "放行" if field["writer_ok"] else "拦下",
+         _range_text(field.get("evidence") or {})]
+        for field in write.get("fields") or []
+    ]
+    lines.append(_md_table(["表", "字段", "旧类型", "新类型", "写端", "值域 / 刻度"], write_rows)
+                 if write_rows else "没有扩容字段。")
+    lines.extend(["", "读端：", ""])
+    read_rows = []
+    for report in read.get("reports") or []:
+        if report.get("status") == "not_affected":
+            continue
+        read_rows.append([
+            report["consumer"], report.get("capability_text") or "未登记",
+            report.get("reason") or "", report.get("status_label") or "",
+            report.get("detail_label") or "—", report.get("repair") or "—",
+        ])
+    lines.append(_md_table(["报表", "读取能力", "原因码", "结论", "依据", "处置"], read_rows)
+                 if read_rows else "没有报表引用扩容字段。")
+    return lines
+
+
+def _range_text(evidence: dict) -> str:
+    old = evidence.get("old")
+    new = evidence.get("new")
+    if old and new:
+        return (f"值域 {old.get('lo')}~{old.get('hi')} ⇒ {new.get('lo')}~{new.get('hi')}，"
+                f"刻度 {old.get('quantum')} ⇒ {new.get('quantum')}")
+    if "old_length" in evidence:
+        return f"长度 {evidence.get('old_length')} ⇒ {evidence.get('new_length')}"
+    return f"精度 {evidence.get('old_rank', '—')} ⇒ {evidence.get('new_rank', '—')}"
 
 
 def _created(run: dict):

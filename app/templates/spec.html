@@ -9,6 +9,7 @@
     <a class="btn ghost" href="/api/export/fields.csv">字段账 CSV</a>
     <a class="btn ghost" href="/api/export/refs.csv">引用账 CSV</a>
     <a class="btn ghost" href="/api/export/ledger.csv">账目 CSV</a>
+    <a class="btn ghost" href="/api/export/capability.csv">读取能力 CSV</a>
     <a class="btn ghost" href="/api/export/manifest.json">运行清单</a>
   </div>
 
@@ -35,6 +36,71 @@
 {% endfor %}</pre>
   {% else %}
   <p class="empty">没有改名。</p>
+  {% endif %}
+</section>
+
+<section class="doc-section">
+  <h2><span class="clause">2.1</span>扩容读写兼容</h2>
+  {% if not run %}
+  <p class="empty">还没有批次。</p>
+  {% elif not compatibility %}
+  <p class="empty">没有扩容字段。</p>
+  {% else %}
+  <p class="lede">
+    结论 {{ compatibility.verdict }}（{{ compatibility.verdict_label }}）
+    写端 {% if compatibility.write.allowed %}放行{% else %}拦下{% endif %}
+    受影响报表 {{ compatibility.read.summary.affected_reports }}
+  </p>
+  <div class="wrap-scroll">
+    <table>
+      <caption>写端</caption>
+      <thead><tr><th>表</th><th>字段</th><th>类型</th><th>写端</th><th>值域 / 刻度</th></tr></thead>
+      <tbody>
+        {% for field in compatibility.write.fields %}
+        <tr>
+          <td class="name">{{ field.table }}</td>
+          <td class="name">{{ field.old_name }}</td>
+          <td class="name">{{ field.old_type }} → {{ field.new_type }}</td>
+          <td>{% if field.writer_ok %}<span class="st st-ok">放行</span>{% else %}<span class="st st-bad">拦下</span>{% endif %}</td>
+          <td class="reason">
+            {% if field.evidence.old %}
+            {{ field.evidence.old.lo }}~{{ field.evidence.old.hi }} ⇒ {{ field.evidence.new.lo }}~{{ field.evidence.new.hi }}，刻度 {{ field.evidence.old.quantum }} ⇒ {{ field.evidence.new.quantum }}
+            {% elif field.evidence.old_length is defined %}
+            长度 {{ field.evidence.old_length }} ⇒ {{ field.evidence.new_length }}
+            {% else %}
+            精度 {{ field.evidence.old_rank }} ⇒ {{ field.evidence.new_rank }}
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="wrap-scroll">
+    <table>
+      <caption>读端</caption>
+      <thead><tr><th>报表</th><th>读取能力</th><th>原因码</th><th>结论</th><th>依据</th><th>处置</th></tr></thead>
+      <tbody>
+        {% for report in compatibility.read.reports %}
+        {% if report.status != 'not_affected' %}
+        <tr>
+          <td class="name">{{ report.consumer }}</td>
+          <td class="reason">{{ report.capability_text }}</td>
+          <td class="reason"><span class="code">{{ report.reason }}</span></td>
+          <td>
+            {% if report.status == 'ok' %}<span class="st st-ok">无损</span>
+            {% elif report.status == 'lossy' %}<span class="st st-bad">丢精度</span>
+            {% elif report.status == 'broken' %}<span class="st st-bad">断链</span>
+            {% else %}<span class="st st-warn">未登记</span>{% endif %}
+          </td>
+          <td class="reason">{{ report.detail_label }}</td>
+          <td class="reason">{{ report.repair or '—' }}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% endif %}
 </section>
 

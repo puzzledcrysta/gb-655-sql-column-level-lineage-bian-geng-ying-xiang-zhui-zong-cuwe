@@ -53,6 +53,32 @@ CODES: dict[str, tuple[str, str]] = {
     "COMPATIBLE": ("兼容", "info"),
     "COMPATIBLE_BY_MAPPING": ("加别名后兼容", "warn"),
     "BREAKING": ("破坏", "break"),
+    # 报表读取能力与批次读写结论
+    "READ_CAPABILITY_OK": ("读取能力覆盖新值域", "info"),
+    "READ_CAPABILITY_LOSSY": ("读取能力不足会丢精度", "break"),
+    "READ_CAPABILITY_MISSING": ("报表未登记读取能力", "warn"),
+    "READ_CAPABILITY_NOT_REQUIRED": ("未引用扩容字段", "info"),
+    "BATCH_WRITE_ALLOWED": ("扩容字段写端放行", "info"),
+    "BATCH_WRITE_BLOCKED": ("扩容字段写端被拦下", "break"),
+    "BATCH_COMPATIBLE": ("批次读写兼容", "info"),
+    "BATCH_READ_PARTIAL": ("写端放行、读端按报表分批处理", "warn"),
+    "BATCH_BREAKING": ("批次写端不兼容", "break"),
+    "BATCH_NO_WIDEN": ("无扩容字段、本批不适用", "info"),
+}
+
+# 读取能力不足的细分，挂在明细里，不进码表
+CAPABILITY_DETAILS = {
+    "report_unregistered": "报表整体未登记读取能力",
+    "family_unregistered": "该类型族未登记读取能力",
+    "capability_type_unknown": "读取能力类型不可解析",
+    "capability_registration_invalid": "读取能力登记结构不合法",
+    "field_type_unknown": "字段类型不可解析",
+    "family_mismatch": "读取能力与字段类型族不同",
+    "scale_exceeds_capability": "读取能力小数位不足",
+    "range_exceeds_capability": "读取能力取值范围不足",
+    "exactness_exceeds_capability": "读取能力精确表示范围不足",
+    "length_exceeds_capability": "读取能力长度上限不足",
+    "temporal_exceeds_capability": "读取能力时间精度不足",
 }
 
 # 类型收窄细分，挂在明细里，不进码表
@@ -80,6 +106,8 @@ def severity(code: str) -> str:
 def narrow_label(detail: str | None) -> str:
     if not detail:
         return "—"
+    if detail in CAPABILITY_DETAILS:
+        return CAPABILITY_DETAILS[detail]
     return NARROW_DETAILS.get(detail, detail)
 
 
